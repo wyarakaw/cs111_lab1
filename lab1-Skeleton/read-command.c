@@ -2,9 +2,12 @@
 
 #include "command.h"
 #include "command-internals.h"
+#include "alloc.h"
 
 #include <stdio.h>
+#include <stdlib.h> //this is for exit function and malloc
 #include <ctype.h>
+#include <string.h>
 #include <error.h>
 #include <getopt.h>
 
@@ -91,7 +94,8 @@ char** make_word(char *simple_command, int num_words){
             memset(new_word, '\0', (i+1)*sizeof(char));
             
             //add word to second array
-            for (int j=0; j<word_character_count;j++){
+            int j=0;
+            for (j=0; j<word_character_count;j++){
                 new_word[j] =simple_command[word_array_pos];
                 word_array_pos++;
             }
@@ -118,7 +122,8 @@ char** make_word(char *simple_command, int num_words){
     memset(new_word, '\0', (i+1)*sizeof(char));
     
     //add word to second array
-    for (int j=0; j<word_character_count;j++){
+    int j=0;
+    for (j=0; j<word_character_count;j++){
         new_word[j] =simple_command[word_array_pos];
         word_array_pos++;
     }
@@ -168,7 +173,8 @@ command_t createCommand(enum command_type new_cmd, char *command_string) {
                     memset(input_filename, '\0', (input_filename_size+1) * sizeof(char));
                     int filename_pos =0;
                     
-                    for (int l = filename_startpos; l<k; l++) {
+                    int l = 0;
+                    for (l = filename_startpos; l<k; l++) {
                         input_filename[filename_pos] = command_string[l];
                         filename_pos++;
                     }
@@ -190,7 +196,8 @@ command_t createCommand(enum command_type new_cmd, char *command_string) {
                     memset(output_filename, '\0', (input_filename_size+1) * sizeof(char));
                     int filename_pos =0;
                     
-                    for (int l = filename_startpos; l<k; l++) {
+                    int l=0;
+                    for (l = filename_startpos; l<k; l++) {
                         output_filename[filename_pos] = command_string[l];
                         filename_pos++;
                     }
@@ -654,8 +661,8 @@ void eatWhiteSpaces(char *buffer, int bufferSize, char *newArray){
     bool foundWord = false;
     int newArrayPos = 0;
     //memset(newArray, '\0', bufferSize * sizeof(char));
-    
-    for (int i = 0; i < bufferSize; i++){
+    int i=0;
+    for (i = 0; i < bufferSize; i++){
         
         if (buffer[i] == ' '){
             //if we have a valid word before the space
