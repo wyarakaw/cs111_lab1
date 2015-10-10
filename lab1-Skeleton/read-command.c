@@ -1097,6 +1097,7 @@ make_command_stream (int (*get_next_byte) (void *),
     }
     
     char* buffer_no_whitespaces = checked_malloc(BUFFER_SIZE * (sizeof(char)));  //the correct syntaxed command
+    memset(buffer_no_whitespaces, '\0', BUFFER_SIZE * sizeof(char));
     
     //run validation, then parse if correct
     //void eatWhiteSpaces(char *buffer, int bufferSize, char *newArray)
@@ -1137,10 +1138,25 @@ make_command_stream (int (*get_next_byte) (void *),
     return theStream;
 }
 
+/* Read a command from STREAM; return it, or NULL on EOF.  If there is
+ an error, report the error and exit instead of returning.  */
 command_t
 read_command_stream (command_stream_t s)
 {
-    /* FIXME: Replace this with your implementation too.  */
-    error (1, 0, "command reading not yet implemented");
-    return 0;
+    //if command_stream is empty, return NULL
+    if (s->head == NULL && s->tail == NULL){
+        return NULL;
+    }
+    
+    //grab the command that we want to return
+    command_t grabbed_command = s->head->cmd;
+    
+
+    commandNode_t to_be_freed = s->head;
+    s->head = s->head->next;
+    s->head->prev = NULL;
+        
+    free(to_be_freed);
+    
+    return grabbed_command;
 }
