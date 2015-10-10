@@ -77,7 +77,7 @@ enum char_type identify_char_type(char character) {
 char** make_word(char *simple_command, int num_words){
     
     char **words = (char**)(checked_malloc((num_words+1) * sizeof(char*)));
-    memset (words, '\0', num_words * sizeof(char*));
+    memset (words, '\0', (num_words+1) * sizeof(char*));
     
     //counters
     int pointer_array_pos = 0;
@@ -390,8 +390,8 @@ int getPrecedence(commandNode_t operator) {
 
 commandNode_t combine_commands(commandNode_t operator, commandNode_t operand1, commandNode_t operand2) {
     
-    command_t c1 = operand1->cmd;
-    command_t c2 = operand2->cmd;
+    command_t c2 = operand1->cmd;
+    command_t c1 = operand2->cmd;
     
     operator->cmd->u.command[0] = c1;
     operator->cmd->u.command[1] = c2;
@@ -1097,7 +1097,6 @@ make_command_stream (int (*get_next_byte) (void *),
     }
     
     char* buffer_no_whitespaces = checked_malloc(BUFFER_SIZE * (sizeof(char)));  //the correct syntaxed command
-    memset(buffer_no_whitespaces, '\0', BUFFER_SIZE * sizeof(char));
     
     //run validation, then parse if correct
     //void eatWhiteSpaces(char *buffer, int bufferSize, char *newArray)
@@ -1138,27 +1137,28 @@ make_command_stream (int (*get_next_byte) (void *),
     return theStream;
 }
 
-/* Read a command from STREAM; return it, or NULL on EOF.  If there is
- an error, report the error and exit instead of returning.  */
 command_t
 read_command_stream (command_stream_t s)
 {
-    //if command_stream is empty, return NULL
-    if (s->head == NULL){
+    /* FIXME: Replace this with your implementation too.  */
+    
+    
+    
+    if (s->head == NULL) {
         return NULL;
     }
     
-    //grab the command that we want to return
+    
     command_t grabbed_command = s->head->cmd;
-    
-
     commandNode_t to_be_freed = s->head;
-    s->head = s->head->next;
-    if (s->head != NULL){
-        s->head->prev = NULL;
-    }
-        
-    free(to_be_freed);
     
+    s->head = s->head->next;
+    
+    if (s->head != NULL) {
+        s->head->prev = NULL;
+        
+    }
+    free(to_be_freed);
     return grabbed_command;
+    
 }
