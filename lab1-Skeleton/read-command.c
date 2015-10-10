@@ -1144,7 +1144,7 @@ command_t
 read_command_stream (command_stream_t s)
 {
     //if command_stream is empty, return NULL
-    if (s->head == NULL && s->tail == NULL){
+    if (s->head == NULL){
         return NULL;
     }
     
@@ -1154,7 +1154,9 @@ read_command_stream (command_stream_t s)
 
     commandNode_t to_be_freed = s->head;
     s->head = s->head->next;
-    s->head->prev = NULL;
+    if (s->head != NULL){
+        s->head->prev = NULL;
+    }
         
     free(to_be_freed);
     

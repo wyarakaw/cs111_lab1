@@ -1,7 +1,7 @@
 // UCLA CS 111 Lab 1 main program
 
 #include <errno.h>
-#include <error.h>
+//#include <error.h>
 #include <getopt.h>
 #include <stdio.h>
 
@@ -56,6 +56,7 @@ options_exhausted:;
     command_t command;
     while ((command = read_command_stream (command_stream)))
     {
+        
         if (print_tree)
         {
             printf ("# %d\n", command_number++);
@@ -69,4 +70,5 @@ options_exhausted:;
     }
     
     return print_tree || !last_command ? 0 : command_status (last_command);
+    return 0;
 }
