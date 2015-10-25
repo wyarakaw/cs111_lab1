@@ -223,6 +223,8 @@ execute_command (command_t c, int time_travel)
             
         case SUBSHELL_COMMAND:
             
+            c->u.subshell_command->input = c->input;
+            c->u.subshell_command->output = c->output;
             execute_command(c->u.subshell_command, time_travel);
             
             break;
