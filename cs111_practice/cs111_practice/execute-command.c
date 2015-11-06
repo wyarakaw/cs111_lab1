@@ -169,8 +169,43 @@ void add_rnode_to_list(rnode_t rnode, read_list_t read_list) {
     }
 }
 
+read_list_t make_read_list(read_list_t r_list, command_t c){
+    if (!c){
+        return NULL;
+    }
+    
+    //if c->output is not NULL, there is a write, add it
+    if (c->input){
+        rnode_t new_read = create_rnode(c->output);
+        add_rnode_to_list(new_read, r_list);
+    }
+    
+    switch (c->type) {
+        case AND_COMMAND:
+        case SEQUENCE_COMMAND:
+        case OR_COMMAND:
+        case PIPE_COMMAND: {
+            make_read_list(r_list, c->u.command[0]);
+            make_read_list(r_list, c->u.command[1]);
+            break;
+        }
+        case SIMPLE_COMMAND:
+            break;
+        case SUBSHELL_COMMAND: {
+            make_read_list(r_list, c->u.subshell_command);
+            break;
+        }
+        default:
+            break;
+    }
+    
+    return r_list;
+}
 
 
+/////////////////////////////////////////////////////////////
+//////////////   EXECUTING COMMAND CODE    //////////////////
+/////////////////////////////////////////////////////////////
 
 
 //check for inputs and outputs
@@ -182,13 +217,13 @@ void handle_IO(command_t c) {
         int input_fd;
         input_fd = open(c->input, O_RDONLY, 0666);
         if (input_fd < 0) {
-            fprintf(stderr, "%s: Error opening input file!\n", c->input);
+            fprintf(stderr, "%s: error opening input file\n", c->input);
             exit(1);
         }
         
         int dup_result = dup2(input_fd, 0);
         if (dup_result < 0) {
-            fprintf(stderr, "Error in dup2() for input %s\n", c->input);
+            fprintf(stderr, "Error in dup2() for input %s!\n", c->input);
             exit(1);
         }
         
@@ -201,7 +236,7 @@ void handle_IO(command_t c) {
         output_fd = open(c->output, O_CREAT | O_WRONLY | O_TRUNC, 0666);
         
         if (output_fd < 0) {
-            fprintf(stderr, "%s : Error opening output file!\n", c->output);
+            fprintf(stderr, "%s: error opening output file", c->output);
             exit(1);
         }
         
@@ -216,18 +251,17 @@ void handle_IO(command_t c) {
     
 }
 
-
-
+//what is time_travel?
 void
 execute_command (command_t c, int time_travel)
 {
+    
     pid_t pid;
     int fildes[2];
-    
     switch (c->type) {
             
         case SIMPLE_COMMAND:
-
+            
             pid = fork();
             
             if (pid == -1) { //error in fork()
@@ -241,24 +275,30 @@ execute_command (command_t c, int time_travel)
                 handle_IO(c);
                 
                 execvp(c->u.word[0], c->u.word);
+                
+                //error in finding file
+                
                 fprintf(stderr, "%s: command not found\n", c->u.word[0]);
                 exit(1);
+                
             }
             
             
             else {  //this is the parent
                 int status;
                 //wait for child to exit
+                
                 while (-1 == waitpid(pid, &status, 0)){
-                    
+                    //    printf("Child has not exited yet! WIFEXITED returns %d\n", WIFEXITED(status));
                 }
-                // printf("Child has not exited yet! WIFEXITED returns %d\n", WIFEXITED(status));
-                //printf("WIFEXITED returns %d\n", WIFEXITED(status));
-                //if (WIFEXITED(status)) {
-                // printf("first child exited with %u\n", WEXITSTATUS(status));
-                if (WIFEXITED(status))
+                /*
+                 printf("WIFEXITED returns %d\n", WIFEXITED(status));
+                 if (WIFEXITED(status)) {
+                 printf("first child exited with %u\n", status);*/
+                if (WIFEXITED(status)) {
                     c->status = WEXITSTATUS(status);
-                    //printf("Exit status for %s command: %d", c->u.word[0], c->status);
+                    //printf("Exit status for %s command: %d\n", c->u.word[0], c->status);
+                }
                 
             }
             
@@ -314,7 +354,6 @@ execute_command (command_t c, int time_travel)
             }
             
             pid = fork();
-
             
             if (pid == -1) { //error in fork()
                 fprintf(stderr, "Error in fork() for PIPE_COMMAND!");
@@ -325,15 +364,15 @@ execute_command (command_t c, int time_travel)
                 close(fildes[0]);
                 
                 /*
-                dup2 to check to see if we can write to pipe
-                remember: file descriptors have the following integer values:
-                    0: for standard input
-                    1: for standard output
-                    2: for standard error
-                */
+                 dup2 to check to see if we can write to pipe
+                 remember: file descriptors have the following integer values:
+                 0: for standard input
+                 1: for standard output
+                 2: for standard error
+                 */
                 
                 if (dup2(fildes[1],1) == -1){
-
+                    
                     fprintf(stderr, "Cannot write to pipe");
                     exit(1);
                 }
@@ -342,7 +381,6 @@ execute_command (command_t c, int time_travel)
                 c->status = c->u.command[0]->status;
                 
                 close(fildes[1]);
-
                 exit(0);
                 
             } else if (pid > 0) { //parent
@@ -375,8 +413,8 @@ execute_command (command_t c, int time_travel)
             
         case SUBSHELL_COMMAND:
             
-            c->u.subshell_command->input = c->input;
-            c->u.subshell_command->output = c->output;
+            c->u.subshell_command->input=c->input;
+            c->u.subshell_command->output= c->output;
             execute_command(c->u.subshell_command, time_travel);
             
             break;
@@ -386,9 +424,5 @@ execute_command (command_t c, int time_travel)
             exit(1);
             break;
             
-            
     }
-    
-    
-    
 }
