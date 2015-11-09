@@ -236,9 +236,6 @@ enum command_type getNodeType(commandNode_t node)
 /////////////////////////COMMAND STACK///////////////////////
 //  implemented using a linked list of commandNodes        //
 
-
-typedef struct commandStack *commandStack_t;
-
 struct commandStack{
     commandNode_t bottom;
     commandNode_t top;
@@ -354,8 +351,6 @@ commandNode_t combine_commands(commandNode_t operator, commandNode_t top_operand
 
 //////////////////////COMMAND STREAM/////////////////////
 // command_stream is a linked list of commandNodes     //
-
-//typedef struct command_stream *command_stream_t;
 
 //plant a tree. soon it will become part of a forest
 command_t make_command_tree(char *complete_command){
@@ -1100,6 +1095,25 @@ make_command_stream (int (*get_next_byte) (void *),
             if (!found_AND_OR_PIPE_SEQUENCE && consecutive_newlines == 1) {
                 buffer[numChars] = ';';
                 numChars++;
+            }
+            
+            if (curr == '#') {
+                //add hashtag to buffer
+                buffer[numChars] = '#';
+                numChars++;
+                
+                while (identify_char_type(curr) != NEWLINE_CHAR){
+                    if ((curr = get_next_byte(get_next_byte_argument)) == EOF) {
+                        break;
+                    }
+                }
+                if (curr == EOF)
+                    break;
+                
+                //broke out of loop, curr is now a newline char; add to buffer
+                buffer[numChars] = '\n';
+                numChars++;
+                
             }
             
             buffer[numChars] = curr;
