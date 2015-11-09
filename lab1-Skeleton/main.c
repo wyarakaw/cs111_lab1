@@ -1,20 +1,21 @@
-// UCLA CS 111 Lab 1 main program
+//
+//  main.c
+//  cs111_practice
+//
+//  Created by Austin Lazaro on 10/3/15.
+//  Copyright (c) 2015 Austin Lazaro. All rights reserved.
+//
 
-#include <errno.h>
-#include <error.h>
-#include <getopt.h>
 #include <stdio.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <getopt.h>
+#include <errno.h>
+#include <string.h>
 
+#include "command-internals.h"
 #include "command.h"
-
-static char const *program_name;
-static char const *script_name;
-
-static void
-usage (void)
-{
-    error (1, 0, "usage: %s [-pt] SCRIPT-FILE", program_name);
-}
+#include "alloc.h"
 
 static int
 get_next_byte (void *stream)
@@ -22,51 +23,77 @@ get_next_byte (void *stream)
     return getc (stream);
 }
 
-int
-main (int argc, char **argv)
-{
-    int opt;
+
+static char const *program_name;
+static char const *script_name;
+
+
+int main (int argc, char **argv) {
+    
+    
+    /* char *a[] = {"cat2", "a.txt", NULL};
+     
+     execvp(a[0], a);
+     printf("Hi");
+     return 0;
+     
+     */
+    
     int command_number = 1;
-    int print_tree = 0;
-    int time_travel = 0;
+    int print_tree = 1;
+    int time_travel = 1;
     program_name = argv[0];
-    
-    for (;;)
-        switch (getopt (argc, argv, "pt"))
-    {
-        case 'p': print_tree = 1; break;
-        case 't': time_travel = 1; break;
-        default: usage (); break;
-        case -1: goto options_exhausted;
-    }
-options_exhausted:;
-    
-    // There must be exactly one file argument.
-    if (optind != argc - 1)
-        usage ();
-    
+    /*
+     for (;;)
+     switch (getopt (argc, argv, "pt"))
+     {
+     case 'p': print_tree = 1; break;
+     case 't': time_travel = 1; break;
+     default: break;
+     case -1: goto options_exhausted;
+     }
+     options_exhausted:;
+     */
     script_name = argv[optind];
     FILE *script_stream = fopen (script_name, "r");
     if (! script_stream)
-        error (1, errno, "%s: cannot open", script_name);
+        fprintf(stderr, "%s: cannot open", script_name);
     command_stream_t command_stream =
     make_command_stream (get_next_byte, script_stream);
     
     command_t last_command = NULL;
     command_t command;
-    while ((command = read_command_stream (command_stream)))
-    {
-        if (print_tree)
+    
+    
+    if (time_travel==1) {
+        exec_time_travel(command_stream);
+        exit(0);
+    }
+    else {
+        
+        while ((command = read_command_stream (command_stream)))
         {
-            printf ("# %d\n", command_number++);
-            print_command (command);
-        }
-        else
-        {
-            last_command = command;
-            execute_command (command, time_travel);
+            
+            //printf ("# %d\n", command_number++);
+            //print_command (command);
+            
+            //free_command(command);
+            execute_command(command, 0);
+            
         }
     }
     
-    return print_tree || !last_command ? 0 : command_status (last_command);
+    /*
+     char testCommand[] = "cat -a b<foo.txt>foo2.txt";
+     command_t test = createCommand(SIMPLE_COMMAND, testCommand);
+     
+     for (int i = 0; test->u.word[i] != '\0'; i++ ){
+     for (int j = 0; test->u.word[i][j] != '\0'; j++) {
+     printf("%c", test->u.word[i][j]);
+     }
+     printf("\n");
+     }*/
+    
+    
+    return 0;
 }
