@@ -151,111 +151,6 @@ command_t createCommand(enum command_type new_cmd, char *command_string) {
                 }
                 i++;
             }
-            /*
-             int j=0;
-             
-             //search for redirects
-             while (command_string[j] != '\0') {
-             if (command_string[j] == '<') {
-             //get the filename
-             int k = j+1;
-             int filename_startpos = k;
-             while (command_string[k] != '\0' && command_string[k] != '>') {
-             k++;
-             }
-             
-             int input_filename_size = k-filename_startpos;
-             char* input_filename = (char*) checked_malloc((input_filename_size+1) * sizeof(char));
-             memset(input_filename, '\0', (input_filename_size+1) * sizeof(char));
-             int filename_pos =0;
-             
-             for (int l = filename_startpos; l<k; l++) {
-             input_filename[filename_pos] = command_string[l];
-             filename_pos++;
-             }
-             
-             //if we're here we've read in the filename
-             x->input = input_filename;
-             }
-             
-             if (command_string[j] == '>') {
-             
-             int k = j+1;
-             int filename_startpos = k;
-             while (command_string[k] != '\0') {
-             k++;
-             }
-             
-             int input_filename_size = k-filename_startpos;
-             char* output_filename = (char*) checked_malloc((input_filename_size+1) * sizeof(char));
-             memset(output_filename, '\0', (input_filename_size+1) * sizeof(char));
-             int filename_pos =0;
-             
-             for (int l = filename_startpos; l<k; l++) {
-             output_filename[filename_pos] = command_string[l];
-             filename_pos++;
-             }
-             
-             //if we're here, we've read in the full filename.
-             x->output = output_filename;
-             
-             }
-             
-             j++;
-             
-             }*/
-            int j=0;
-            
-            //search for redirects
-            while (command_string[j] != '\0') {
-                if (command_string[j] == '<') {
-                    //get the filename
-                    int k = j+1;
-                    int filename_startpos = k;
-                    while (command_string[k] != '\0' && command_string[k] != '>') {
-                        k++;
-                    }
-                    
-                    int input_filename_size = k-filename_startpos;
-                    char* input_filename = (char*) checked_malloc((input_filename_size+1) * sizeof(char));
-                    memset(input_filename, '\0', (input_filename_size+1) * sizeof(char));
-                    int filename_pos =0;
-                    
-                    for (int l = filename_startpos; l<k; l++) {
-                        input_filename[filename_pos] = command_string[l];
-                        filename_pos++;
-                    }
-                    
-                    //if we're here we've read in the filename
-                    x->input = input_filename;
-                }
-                
-                if (command_string[j] == '>') {
-                    
-                    int k = j+1;
-                    int filename_startpos = k;
-                    while (command_string[k] != '\0') {
-                        k++;
-                    }
-                    
-                    int input_filename_size = k-filename_startpos;
-                    char* output_filename = (char*) checked_malloc((input_filename_size+1) * sizeof(char));
-                    memset(output_filename, '\0', (input_filename_size+1) * sizeof(char));
-                    int filename_pos =0;
-                    
-                    for (int l = filename_startpos; l<k; l++) {
-                        output_filename[filename_pos] = command_string[l];
-                        filename_pos++;
-                    }
-                    
-                    //if we're here, we've read in the full filename.
-                    x->output = output_filename;
-                    
-                }
-                
-                j++;
-                
-            }
             
             //number of words in simple command = white space + 1
             //malloc appropriate memory
@@ -340,6 +235,9 @@ enum command_type getNodeType(commandNode_t node)
 
 /////////////////////////COMMAND STACK///////////////////////
 //  implemented using a linked list of commandNodes        //
+
+
+typedef struct commandStack *commandStack_t;
 
 struct commandStack{
     commandNode_t bottom;
@@ -456,6 +354,8 @@ commandNode_t combine_commands(commandNode_t operator, commandNode_t top_operand
 
 //////////////////////COMMAND STREAM/////////////////////
 // command_stream is a linked list of commandNodes     //
+
+//typedef struct command_stream *command_stream_t;
 
 //plant a tree. soon it will become part of a forest
 command_t make_command_tree(char *complete_command){
@@ -1328,4 +1228,3 @@ read_command_stream (command_stream_t s)
     free(to_be_freed);
     return grabbed_command;
 }
-
