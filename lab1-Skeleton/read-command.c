@@ -137,6 +137,7 @@ command_t createCommand(enum command_type new_cmd, char *command_string) {
     x->status = -1;
     x->input = 0;
     x->output = 0;
+    x->tree_number = 0;
     
     
     switch (new_cmd) {
@@ -150,59 +151,6 @@ command_t createCommand(enum command_type new_cmd, char *command_string) {
                 }
                 i++;
             }
-            
-            int j=0;
-            /*
-            //search for redirects
-            while (command_string[j] != '\0') {
-                if (command_string[j] == '<') {
-                    //get the filename
-                    int k = j+1;
-                    int filename_startpos = k;
-                    while (command_string[k] != '\0' && command_string[k] != '>') {
-                        k++;
-                    }
-                    
-                    int input_filename_size = k-filename_startpos;
-                    char* input_filename = (char*) checked_malloc((input_filename_size+1) * sizeof(char));
-                    memset(input_filename, '\0', (input_filename_size+1) * sizeof(char));
-                    int filename_pos =0;
-                    
-                    for (int l = filename_startpos; l<k; l++) {
-                        input_filename[filename_pos] = command_string[l];
-                        filename_pos++;
-                    }
-                    
-                    //if we're here we've read in the filename
-                    x->input = input_filename;
-                }
-                
-                if (command_string[j] == '>') {
-                    
-                    int k = j+1;
-                    int filename_startpos = k;
-                    while (command_string[k] != '\0') {
-                        k++;
-                    }
-                    
-                    int input_filename_size = k-filename_startpos;
-                    char* output_filename = (char*) checked_malloc((input_filename_size+1) * sizeof(char));
-                    memset(output_filename, '\0', (input_filename_size+1) * sizeof(char));
-                    int filename_pos =0;
-                    
-                    for (int l = filename_startpos; l<k; l++) {
-                        output_filename[filename_pos] = command_string[l];
-                        filename_pos++;
-                    }
-                    
-                    //if we're here, we've read in the full filename.
-                    x->output = output_filename;
-                    
-                }
-                
-                j++;
-                
-            }*/
             
             //number of words in simple command = white space + 1
             //malloc appropriate memory
@@ -278,6 +226,7 @@ commandNode_t createNodeFromCommand(command_t new_command){
     return x;
 }
 
+
 enum command_type getNodeType(commandNode_t node)
 {
     return node->cmd->type;
@@ -286,8 +235,6 @@ enum command_type getNodeType(commandNode_t node)
 
 /////////////////////////COMMAND STACK///////////////////////
 //  implemented using a linked list of commandNodes        //
-
-
 
 struct commandStack{
     commandNode_t bottom;
@@ -478,7 +425,7 @@ command_t make_command_tree(char *complete_command){
             }
             
             //if we're here we've read in the filename
-        
+            
             getTop(command_stack)->cmd->input = input_filename;
             buff_pos=k;
             continue;
@@ -630,6 +577,8 @@ command_t make_command_tree(char *complete_command){
     
     return getTop(command_stack)->cmd;
 }
+
+
 
 command_stream_t initStream(){
     command_stream_t new_stream = (command_stream_t) checked_malloc(sizeof(*new_stream));
@@ -1148,6 +1097,25 @@ make_command_stream (int (*get_next_byte) (void *),
                 numChars++;
             }
             
+            if (curr == '#') {
+                //add hashtag to buffer
+                buffer[numChars] = '#';
+                numChars++;
+                
+                while (identify_char_type(curr) != NEWLINE_CHAR){
+                    if ((curr = get_next_byte(get_next_byte_argument)) == EOF) {
+                        break;
+                    }
+                }
+                if (curr == EOF)
+                    break;
+                
+                //broke out of loop, curr is now a newline char; add to buffer
+                buffer[numChars] = '\n';
+                numChars++;
+                
+            }
+            
             buffer[numChars] = curr;
             numChars++;
             consecutive_newlines = 0;
@@ -1254,10 +1222,6 @@ void free_command(command_t to_be_freed) {
         free(to_be_freed->u.subshell_command);
         
     }
-    
-    
-    
-    
 }
 
 command_t
@@ -1266,7 +1230,6 @@ read_command_stream (command_stream_t s)
     if (s->head == NULL) {
         return NULL;
     }
-    
     
     command_t grabbed_command = s->head->cmd;
     commandNode_t to_be_freed = s->head;
@@ -1279,5 +1242,3 @@ read_command_stream (command_stream_t s)
     free(to_be_freed);
     return grabbed_command;
 }
-
-
