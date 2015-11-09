@@ -14,27 +14,24 @@
 #include <sys/wait.h>
 
 /*
-Thoughts on how to implement time travel:
+ Thoughts on how to implement time travel:
  
-Find files that are dependent
-    - look for input/output operators
-
+ Find files that are dependent
+ - look for input/output operators
  Make dependency graph
-    - which commands are dependent on a previous command?
+ - which commands are dependent on a previous command?
  
-Pseudocode:
-
+ Pseudocode:
  Traverse each tree in order to find commands with inputs and outputs
-    Store these inputs/outputs in a data structure specific to each tree
+ Store these inputs/outputs in a data structure specific to each tree
  Traverse rest of the trees, and do the same
  Compare the input/output data structures of the trees
-    If we find two inputs/outputs are same in two commands, we have dependence
-        Increment number of dependencies for that specific input/output
+ If we find two inputs/outputs are same in two commands, we have dependence
+ Increment number of dependencies for that specific input/output
  Run non-dependent in parallel
  execute dependent commands sequentially
-
  
-*/
+ */
 
 int
 command_status (command_t c)
@@ -42,10 +39,9 @@ command_status (command_t c)
     return c->status;
 }
 
-/////////////////////////////////////////////////////
-/////////////   WRITE NODE CODE    //////////////////
-/////////////////////////////////////////////////////
-
+///////////////////////////////////////////////////////////////
+//////////////////   WRITE NODE CODE    ///////////////////////
+///////////////////////////////////////////////////////////////
 
 struct wnode {
     char* file_name;
@@ -59,7 +55,7 @@ struct write_list {
 };
 
 write_list_t init_write_list(){
-    write_list_t new_write_list = (write_list_t) checked_malloc(sizeof(write_list_t));
+    write_list_t new_write_list = (write_list_t) checked_malloc(sizeof(struct write_list));
     new_write_list->head = NULL;
     new_write_list->tail = NULL;
     new_write_list->current = NULL;
@@ -123,9 +119,9 @@ write_list_t make_write_list(write_list_t w_list, command_t c){
     return w_list;
 }
 
-/////////////////////////////////////////////////////
-//////////////   READ NODE CODE    //////////////////
-/////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////
+///////////////////   READ NODE CODE    ///////////////////////
+///////////////////////////////////////////////////////////////
 
 struct rnode {
     char* file_name;
@@ -139,7 +135,7 @@ struct read_list {
 };
 
 read_list_t init_read_list(){
-    read_list_t new_read_list = (read_list_t) checked_malloc(sizeof(read_list_t));
+    read_list_t new_read_list = (read_list_t) checked_malloc(sizeof(struct read_list));
     new_read_list->head = NULL;
     new_read_list->tail = NULL;
     new_read_list->current = NULL;
@@ -174,11 +170,12 @@ read_list_t make_read_list(read_list_t r_list, command_t c){
         return NULL;
     }
     
-    //if c->output is not NULL, there is a write, add it
+    //if c->input is not NULL, there is a read, add it
     if (c->input){
-        rnode_t new_read = create_rnode(c->output);
+        rnode_t new_read = create_rnode(c->input);
         add_rnode_to_list(new_read, r_list);
     }
+    
     
     switch (c->type) {
         case AND_COMMAND:
@@ -189,8 +186,17 @@ read_list_t make_read_list(read_list_t r_list, command_t c){
             make_read_list(r_list, c->u.command[1]);
             break;
         }
-        case SIMPLE_COMMAND:
+        case SIMPLE_COMMAND: {
+            //check for arguments
+            int i = 1;
+            while (c->u.word[i] != NULL) {
+                
+                rnode_t new_read = create_rnode(c->u.word[i]);
+                add_rnode_to_list(new_read, r_list);
+                i++;
+            }
             break;
+        }
         case SUBSHELL_COMMAND: {
             make_read_list(r_list, c->u.subshell_command);
             break;
@@ -202,11 +208,165 @@ read_list_t make_read_list(read_list_t r_list, command_t c){
     return r_list;
 }
 
+//Compares read_lists. If we find matching reads, then we return 1.
+//If there are no matching reads, return 0.
+bool compare_read_list (read_list_t read_list1, read_list_t read_list2){
+    if (read_list1 == NULL || read_list2 == NULL)
+        return false;
+    
+    //We use these variables to traverse through each write_list
+    rnode_t list1_curr_node = read_list1->head;
+    rnode_t list2_curr_node = read_list2->head;
+    
+    while (list1_curr_node != NULL){
+        while (list2_curr_node != NULL){
+            if (list1_curr_node->file_name == list2_curr_node->file_name){
+                return true;
+            }
+            
+            list2_curr_node = list2_curr_node->next;
+        }
+        
+        list1_curr_node = list1_curr_node->next;
+    }
+    
+    return false;
+}
 
 /////////////////////////////////////////////////////////////
-//////////////   EXECUTING COMMAND CODE    //////////////////
+/////////////////   DEPENDENCY CODE    //////////////////////
 /////////////////////////////////////////////////////////////
 
+bool RAW_dependency(read_list_t tree2_read_list, write_list_t tree1_write_list){
+    if (tree2_read_list == NULL || tree1_write_list == NULL)
+        return false;
+    
+    //temp variables for iteration through lists
+    rnode_t tree2_curr_node = tree2_read_list->head;
+    wnode_t tree1_curr_node = tree1_write_list->head;
+    
+    while (tree2_curr_node != NULL){
+        while (tree1_curr_node != NULL){
+            if (strcmp(tree2_curr_node->file_name, tree1_curr_node->file_name) == 0){
+                return true;
+            }
+            
+            tree1_curr_node = tree1_curr_node->next;
+        }
+        
+        tree2_curr_node = tree2_curr_node->next;
+    }
+    
+    return false;
+}
+
+bool WAR_dependency(write_list_t tree2_write_list, read_list_t tree1_read_list){
+    if (tree2_write_list == NULL || tree1_read_list == NULL)
+        return false;
+    
+    //temp variables for iteration through lists
+    wnode_t tree2_curr_node = tree2_write_list->head;
+    rnode_t tree1_curr_node = tree1_read_list->head;
+    
+    while (tree2_curr_node != NULL){
+        while (tree1_curr_node != NULL){
+            if (strcmp(tree2_curr_node->file_name, tree1_curr_node->file_name) == 0){
+                return true;
+            }
+            
+            tree1_curr_node = tree1_curr_node->next;
+        }
+        
+        tree2_curr_node = tree2_curr_node->next;
+    }
+    
+    return false;
+}
+
+bool WAW_dependency(write_list_t tree2_write_list, write_list_t tree1_write_list){
+    if (tree2_write_list == NULL || tree1_write_list == NULL)
+        return false;
+    
+    //temp variables for iteration through lists
+    wnode_t tree1_curr_node = tree2_write_list->head;
+    wnode_t tree2_curr_node = tree1_write_list->head;
+    
+    while (tree1_curr_node != NULL){
+        while (tree2_curr_node != NULL){
+            if (strcmp(tree1_curr_node->file_name, tree2_curr_node->file_name) == 0){
+                return true;
+            }
+            
+            tree2_curr_node = tree2_curr_node->next;
+        }
+        
+        tree1_curr_node = tree1_curr_node->next;
+    }
+    
+    return false;
+}
+
+void make_dependency_lists (command_stream_t cstream){
+    
+    if (cstream == NULL){
+        fprintf(stderr, "Error: Cannot make dependency lists on NULL stream.");
+        exit(1);
+    }
+    
+    commandNode_t curr_node = cstream->head;
+    commandNode_t to_be_compared = cstream->head->next;
+    
+    int i=0;
+    
+    while (curr_node != NULL){
+        
+        while (to_be_compared != NULL){
+            
+            //check for read-after-write (RAW) dependency
+            //check for write-after-read (WAR) dependency
+            //check for waw dependency
+            if (RAW_dependency(to_be_compared->read_list, curr_node->write_list)){
+                i=0;
+                while (to_be_compared->dependency_list[i] != '\0'){
+                    i++;
+                }
+                to_be_compared->dependency_list[i] = curr_node;
+                to_be_compared = to_be_compared->next;
+                continue;
+            } else if (WAR_dependency(to_be_compared->write_list, curr_node->read_list)){
+                i=0;
+                while (to_be_compared->dependency_list[i] != '\0'){
+                    i++;
+                }
+                to_be_compared->dependency_list[i] = curr_node;
+                to_be_compared = to_be_compared->next;
+                
+                continue;
+            } else if (WAW_dependency(to_be_compared->write_list, curr_node->write_list)){
+                i=0;
+                while (to_be_compared->dependency_list[i] != '\0'){
+                    i++;
+                }
+                to_be_compared->dependency_list[i] = curr_node;
+                to_be_compared = to_be_compared->next;
+                continue;
+            }
+            
+            /* If we get here, no dependencies were encountered. */
+            to_be_compared = to_be_compared->next;
+        }
+        
+        curr_node = curr_node->next;
+        if (curr_node != NULL){
+            to_be_compared = curr_node->next;
+        }
+    }
+    
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////   EXECUTING COMMAND CODE    ///////////////////////
+///////////////////////////////////////////////////////////////////////
 
 //check for inputs and outputs
 //if they exist, deal with them somehow
@@ -255,7 +415,6 @@ void handle_IO(command_t c) {
 void
 execute_command (command_t c, int time_travel)
 {
-    
     pid_t pid;
     int fildes[2];
     switch (c->type) {
@@ -277,7 +436,6 @@ execute_command (command_t c, int time_travel)
                 execvp(c->u.word[0], c->u.word);
                 
                 //error in finding file
-                
                 fprintf(stderr, "%s: command not found\n", c->u.word[0]);
                 exit(1);
                 
@@ -423,6 +581,211 @@ execute_command (command_t c, int time_travel)
             fprintf(stderr, "command is somehow invalid");
             exit(1);
             break;
+    }
+}
+
+void
+fork_and_begin_exec(command_t command, pid_t *proc_table, int index) {
+    
+    pid_t pid;
+    
+    pid = fork();
+    
+    if (pid == -1) {
+        fprintf(stderr, "Error in fork() at the beginning of time_travel\n");
+        exit(1);
+    }
+    else if (pid == 0) {
+        
+        //printf("executing first command\n");
+        execute_command(command, 0);
+        //printf("                  about to exit command\n");
+        exit(0);
+    }
+    else {
+        
+        proc_table[index] = pid;
+        
+    }
+    
+}
+
+void check_dependencies(commandNode_t cNode) {
+    
+    
+    //if no dependencies, just execute
+    if (cNode->dependency_list[0] == NULL) {
+        
+        cNode->dependencies_done = true;
+    }
+    
+    //if there are dependencies, check if theyre done
+    else {
+        
+        int check = 0;
+        while ( cNode->dependency_list[check] != NULL ) {
+            if (cNode->dependency_list[check]->command_tree_done_executing == false) {
+                break;
+            }
+            check++;
+        }
+        
+        if (cNode->dependency_list[check] == NULL)   //dependency list is done
+            cNode->dependencies_done = true;
+        
+    }
+    
+}
+
+
+int check_blocked_command_dependencies(command_stream_t cstream, pid_t *proc_table, int num_children){
+    
+    commandNode_t check_blocked_commands;
+    
+    int i=0;
+    while ((check_blocked_commands = cstream->blocked_commands[i]) != NULL){
+        
+        check_dependencies(check_blocked_commands);
+        
+        if (check_blocked_commands -> dependencies_done == true && check_blocked_commands ->command_tree_done_executing == false && check_blocked_commands->command_tree_begun_executing == false) {
             
+            //printf("beginning execution after dependencies finished: %d\n", check_blocked_commands->tree_number);
+            
+            check_blocked_commands->command_tree_begun_executing=true;
+            fork_and_begin_exec(check_blocked_commands->cmd, proc_table, check_blocked_commands->tree_number -1);
+            num_children++;
+        }
+        i++;
+    }
+    
+    return num_children;
+}
+
+void
+exec_time_travel(command_stream_t cstream) {
+    
+    make_dependency_lists(cstream);
+    
+    commandNode_t cNode;
+    
+    pid_t *process_table = checked_malloc(cstream->num_nodes * sizeof(pid_t));
+    
+    int number_of_children=0;
+    int number_of_finished = 0;
+    int numBlocked = 0;
+    
+    cNode = cstream->head;
+    
+    while (cNode != NULL){
+        
+        //start executing the first command
+        if (number_of_children == 0){
+            
+            //first node has no dependencies
+            cNode->dependencies_done = true;
+            
+            //printf("                   executing first command: %d\n", cNode->tree_number);
+            cNode->command_tree_begun_executing = true;
+            fork_and_begin_exec(cNode->cmd, process_table, number_of_children);
+            number_of_children++;
+        }
+        
+        else { //this is not the first command
+            
+            //check dependency list of cNode
+            check_dependencies(cNode);
+            
+            //if dependencies are done, fork and begin execution
+            if (cNode -> dependencies_done == true){
+                
+                //printf("            beginning execution after first attempt of checking depedencies:%d\n", cNode->tree_number);
+                cNode->command_tree_begun_executing=true;
+                fork_and_begin_exec(cNode->cmd, process_table, cNode ->tree_number -1);
+                number_of_children++;
+            }
+            
+            else {
+                //add to blocked list
+                cstream->blocked_commands[numBlocked] = cNode;
+                numBlocked++;
+                
+            }
+        }
+        
+        //check if any children are DONE
+        commandNode_t update;
+        update = cstream->head;
+        int k = 0;
+        
+        while (update != NULL && k < number_of_children) {
+            
+            int status;
+            
+            //if a cNode is not flagged as done
+            if (update->command_tree_done_executing == false) {
+                
+                //check if its done now
+                
+                pid_t check_pid = waitpid(process_table[update->tree_number - 1], &status, WNOHANG);
+                
+                //printf("check pid: %d\n", check_pid);
+                
+                if (check_pid != 0){
+                    update->command_tree_done_executing = true;
+                    process_table[update->tree_number - 1] = -1;
+                    number_of_finished++;
+                }
+            }
+            
+            update = update->next;
+            k++;
+        }
+        
+        //check dependencies in blocked_commands
+        number_of_children = check_blocked_command_dependencies(cstream, process_table, number_of_children);
+        
+        cNode = cNode->next;
+    }
+    
+    //begin waiting for blocked
+    while (number_of_finished != cstream->num_nodes) {
+        
+        //check if any children are DONE
+        commandNode_t update;
+        update = cstream->head;
+        int k = 0;
+        
+        while (update != NULL) {
+            
+            int status;
+            
+            //if a cNode is not flagged as done
+            if (update->command_tree_done_executing == false && update->command_tree_begun_executing == true) {
+                
+                //check if its done now
+                int proc_index = update->tree_number-1;
+                pid_t check_pid = waitpid(process_table[proc_index], &status, WNOHANG);
+                
+                //printf("check pid: %d\n", check_pid);
+                
+                if (check_pid == process_table[update->tree_number-1]){
+                    update->command_tree_done_executing = true;
+                    process_table[update->tree_number - 1] = -1;
+                    number_of_finished++;
+                }
+            }
+            
+            update = update->next;
+            k++;
+        }
+        
+        
+        if (number_of_finished == cstream->num_nodes) {
+            return;
+        }
+        
+        //check dependencies in blocked_commands
+        number_of_children = check_blocked_command_dependencies(cstream, process_table, number_of_children);
+        
     }
 }
