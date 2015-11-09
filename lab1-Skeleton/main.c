@@ -1,11 +1,16 @@
 // UCLA CS 111 Lab 1 main program
 
-#include <errno.h>
-#include <error.h>
-#include <getopt.h>
 #include <stdio.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <getopt.h>
+#include <error.h>
+#include <errno.h>
+#include <string.h>
 
+#include "command-internals.h"
 #include "command.h"
+#include "alloc.h"
 
 static char const *program_name;
 static char const *script_name;
@@ -54,6 +59,10 @@ options_exhausted:;
     
     command_t last_command = NULL;
     command_t command;
+    if (time_travel == 1){
+        exec_time_travel(command_stream);
+        exit(0);
+    }
     while ((command = read_command_stream (command_stream)))
     {
         if (print_tree)

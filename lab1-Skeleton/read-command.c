@@ -1,21 +1,16 @@
 // UCLA CS 111 Lab 1 command reading
 
-#include "command.h"
 #include "command-internals.h"
+#include "command.h"
 #include "alloc.h"
-
 #include <stdio.h>
-#include <stdlib.h> //this is for exit function and malloc
 #include <ctype.h>
-#include <string.h>
-#include <error.h>
+#include <stdlib.h>
 #include <getopt.h>
-
+#include <errno.h>
+#include <string.h>
 /* FIXME: You may need to add #include directives, macro definitions,
  static function definitions, etc.  */
-
-//boolean
-typedef enum { false, true } bool;
 
 bool isValidChar(char character){
     if (isalpha(character) || isdigit(character) || character == '!' ||
@@ -90,11 +85,11 @@ char** make_word(char *simple_command, int num_words){
         if (simple_command[i] == ' '){
             
             //ake a new string in memory
-            char *new_word = checked_malloc((i+1)*sizeof(char));
+            char *new_word = (char*) checked_malloc((i+1)*sizeof(char));
             memset(new_word, '\0', (i+1)*sizeof(char));
             
             //add word to second array
-            int j=0;
+            int j;
             for (j=0; j<word_character_count;j++){
                 new_word[j] =simple_command[word_array_pos];
                 word_array_pos++;
@@ -122,7 +117,7 @@ char** make_word(char *simple_command, int num_words){
     memset(new_word, '\0', (i+1)*sizeof(char));
     
     //add word to second array
-    int j=0;
+    int j;
     for (j=0; j<word_character_count;j++){
         new_word[j] =simple_command[word_array_pos];
         word_array_pos++;
@@ -142,6 +137,7 @@ command_t createCommand(enum command_type new_cmd, char *command_string) {
     x->status = -1;
     x->input = 0;
     x->output = 0;
+    x->tree_number = 0;
     
     
     switch (new_cmd) {
@@ -154,61 +150,6 @@ command_t createCommand(enum command_type new_cmd, char *command_string) {
                     white_space_counter++;
                 }
                 i++;
-            }
-            
-            int j=0;
-            
-            //search for redirects
-            while (command_string[j] != '\0') {
-                if (command_string[j] == '<') {
-                    //get the filename
-                    int k = j+1;
-                    int filename_startpos = k;
-                    while (command_string[k] != '\0' && command_string[k] != '>') {
-                        k++;
-                    }
-                    
-                    int input_filename_size = k-filename_startpos;
-                    char* input_filename = (char*) checked_malloc((input_filename_size+1) * sizeof(char));
-                    memset(input_filename, '\0', (input_filename_size+1) * sizeof(char));
-                    int filename_pos =0;
-                    
-                    int l = 0;
-                    for (l = filename_startpos; l<k; l++) {
-                        input_filename[filename_pos] = command_string[l];
-                        filename_pos++;
-                    }
-                    
-                    //if we're here we've read in the filename
-                    x->input = input_filename;
-                }
-                
-                if (command_string[j] == '>') {
-                    
-                    int k = j+1;
-                    int filename_startpos = k;
-                    while (command_string[k] != '\0') {
-                        k++;
-                    }
-                    
-                    int input_filename_size = k-filename_startpos;
-                    char* output_filename = (char*) checked_malloc((input_filename_size+1) * sizeof(char));
-                    memset(output_filename, '\0', (input_filename_size+1) * sizeof(char));
-                    int filename_pos =0;
-                    
-                    int l=0;
-                    for (l = filename_startpos; l<k; l++) {
-                        output_filename[filename_pos] = command_string[l];
-                        filename_pos++;
-                    }
-                    
-                    //if we're here, we've read in the full filename.
-                    x->output = output_filename;
-                    
-                }
-                
-                j++;
-                
             }
             
             //number of words in simple command = white space + 1
@@ -254,19 +195,18 @@ command_t createCommand(enum command_type new_cmd, char *command_string) {
 ///////////////////////COMMAND NODE///////////////////////////////
 //  command node is used in both the stack and the linked list. //
 
-typedef struct commandNode *commandNode_t;
-
-struct commandNode{
-    command_t cmd;
-    commandNode_t next;
-    commandNode_t prev;
-};
 
 commandNode_t createNode(enum command_type new_cmd){
     commandNode_t x = (commandNode_t) checked_malloc(sizeof(*x));
-    //x->cmd = createCommand(new_cmd);
     x->next = NULL;
     x->prev = NULL;
+    x->write_list = NULL;
+    x->read_list = NULL;
+    x->tree_number = 0;
+    x->command_tree_done_executing=false;
+    x->dependencies_done = false;
+    x->command_tree_begun_executing = false;
+    x->dependency_list=checked_malloc(sizeof(commandNode_t));
     return x;
 }
 
@@ -275,6 +215,14 @@ commandNode_t createNodeFromCommand(command_t new_command){
     x->cmd = new_command;
     x->next = NULL;
     x->prev = NULL;
+    x->write_list = NULL;
+    x->read_list = NULL;
+    x->tree_number = 0;
+    x->command_tree_done_executing = false;
+    x->dependencies_done = false;
+    x->command_tree_begun_executing = false;
+    x->dependency_list=checked_malloc(sizeof(commandNode_t));
+    
     return x;
 }
 
@@ -287,9 +235,6 @@ enum command_type getNodeType(commandNode_t node)
 
 /////////////////////////COMMAND STACK///////////////////////
 //  implemented using a linked list of commandNodes        //
-
-
-typedef struct commandStack *commandStack_t;
 
 struct commandStack{
     commandNode_t bottom;
@@ -388,17 +333,17 @@ int getPrecedence(commandNode_t operator) {
     
 }
 
-commandNode_t combine_commands(commandNode_t operator, commandNode_t operand1, commandNode_t operand2) {
+commandNode_t combine_commands(commandNode_t operator, commandNode_t top_operand, commandNode_t bot_operand) {
     
-    command_t c2 = operand1->cmd;
-    command_t c1 = operand2->cmd;
+    command_t c1 = bot_operand->cmd;
+    command_t c2 = top_operand->cmd;
     
     operator->cmd->u.command[0] = c1;
     operator->cmd->u.command[1] = c2;
     
     //assume that this doesnt kill the commands
-    free(operand1);
-    free(operand2);
+    free(top_operand);
+    free(bot_operand);
     
     return operator;
     
@@ -433,7 +378,7 @@ command_t make_command_tree(char *complete_command){
             memset(simple_command, '\0', 1024 * sizeof(char));
             
             //add first valid character, and then add rest of the characters and whitespace in the simple command
-            while (identify_char_type(buff_char) == REGULAR_CHAR || identify_char_type(buff_char) == WHITESPACE_CHAR ||buff_char == '<' || buff_char == '>'){
+            while (identify_char_type(buff_char) == REGULAR_CHAR || identify_char_type(buff_char) == WHITESPACE_CHAR /*||buff_char == '<' || buff_char == '>'*/){
                 
                 simple_command[simple_command_pos] = buff_char;
                 simple_command_pos++;
@@ -458,6 +403,57 @@ command_t make_command_tree(char *complete_command){
             stackPush(operator_stack, new_node);
             buff_pos++;
             continue;
+        }
+        
+        if (buff_char == '<') {
+            
+            //get the filename
+            int k = buff_pos+1;
+            int filename_startpos = k;
+            while (complete_command[k] != '\0' && complete_command[k] != '>' && isOperator(complete_command[k]) != true && complete_command[k]!= ')') {
+                k++;
+            }
+            
+            int input_filename_size = k-filename_startpos;
+            char* input_filename = (char*) checked_malloc((input_filename_size+1) * sizeof(char));
+            memset(input_filename, '\0', (input_filename_size+1) * sizeof(char));
+            int filename_pos =0;
+            int l;
+            for (l = filename_startpos; l<k; l++) {
+                input_filename[filename_pos] = complete_command[l];
+                filename_pos++;
+            }
+            
+            //if we're here we've read in the filename
+            
+            getTop(command_stack)->cmd->input = input_filename;
+            buff_pos=k;
+            continue;
+        }
+        
+        if (buff_char=='>') {
+            
+            int k = buff_pos+1;
+            int filename_startpos = k;
+            while (complete_command[k] != '\0' && isOperator(complete_command[k]) != true && complete_command[k]!= ')') {
+                k++;
+            }
+            
+            int input_filename_size = k-filename_startpos;
+            char* output_filename = (char*) checked_malloc((input_filename_size+1) * sizeof(char));
+            memset(output_filename, '\0', (input_filename_size+1) * sizeof(char));
+            int filename_pos =0;
+            int l;
+            for (l = filename_startpos; l<k; l++) {
+                output_filename[filename_pos] = complete_command[l];
+                filename_pos++;
+            }
+            
+            //if we're here, we've read in the full filename.
+            getTop(command_stack)->cmd->output = output_filename;
+            buff_pos=k;
+            continue;
+            
         }
         
         if (isOperator(buff_char) && operator_stack->top == NULL) {
@@ -551,9 +547,11 @@ command_t make_command_tree(char *complete_command){
                 
             }
             
+            //at this point the popped operator should be a SUBSHELL_OPEN; get rid of it
             free(poppedOperator);
             
             command_t new_subshell = createCommand(SUBSHELL_COMMAND, NULL);
+            new_subshell->u.subshell_command = stackPop(command_stack)->cmd;
             commandNode_t new_subshell_node = createNodeFromCommand(new_subshell);
             stackPush(command_stack, new_subshell_node);
             
@@ -580,42 +578,35 @@ command_t make_command_tree(char *complete_command){
     return getTop(command_stack)->cmd;
 }
 
-struct command_stream {
-    //head and tail pointers
-    commandNode_t head, tail;
-    
-    //just in case we need to look in the middle of the list
-    commandNode_t current;
-};
+
 
 command_stream_t initStream(){
-    command_stream_t new_stream = (command_stream_t) checked_malloc(sizeof(command_stream_t));
+    command_stream_t new_stream = (command_stream_t) checked_malloc(sizeof(*new_stream));
     new_stream->head = NULL;
     new_stream->tail = NULL;
     new_stream->current = NULL;
+    new_stream->blocked_commands = checked_malloc(sizeof(commandNode_t));
+    memset(new_stream->blocked_commands, '\0', sizeof(commandNode_t));
+    new_stream->num_nodes = 0;
     return new_stream;
 }
-
-/*
- commandNode_t root = createNodeFromCommand(make_command_tree(buffer_no_whitespaces));
- addNodeToStream(theStream, root);
- */
 
 void addNodeToStream(command_stream_t cs_stream, commandNode_t new_node) {
     
     if (cs_stream->head == NULL) {
         cs_stream->head = new_node;
         cs_stream->tail = new_node;
-        
     }
     
     else {
         cs_stream->tail->next = new_node;
+        new_node->next=NULL;
+        new_node->prev=cs_stream->tail;
         
-        new_node->next = NULL;
-        new_node->prev = cs_stream->tail;
         cs_stream->tail = new_node;
     }
+    
+    cs_stream->num_nodes = cs_stream->num_nodes+1;
     
 }
 
@@ -659,7 +650,7 @@ void eatWhiteSpaces(char *buffer, int bufferSize, char *newArray){
     bool foundWord = false;
     int newArrayPos = 0;
     //memset(newArray, '\0', bufferSize * sizeof(char));
-    int i=0;
+    int i;
     for (i = 0; i < bufferSize; i++){
         
         if (buffer[i] == ' '){
@@ -859,7 +850,7 @@ make_command_stream (int (*get_next_byte) (void *),
     
     //current character
     char curr;
-    
+    int tree_number = 1;
     char prev_char_stored = '\0';
     int consecutive_newlines = 0;
     
@@ -881,7 +872,6 @@ make_command_stream (int (*get_next_byte) (void *),
     
     //declare command stream and allocate space
     //maybe dont need to allocate space because initStream() already does?
-    
     command_stream_t theStream;    // = (command_stream_t) checked_malloc(sizeof(struct command_stream));
     
     //initialize command_stream
@@ -988,9 +978,9 @@ make_command_stream (int (*get_next_byte) (void *),
                     checkIfOperatorsHaveOperands(buffer_no_whitespaces);
                     validParentheses(buffer_no_whitespaces);
                     
-                    
                     /*
-                     for (int i= 0; i<numChars; i++){
+                     int i;
+                     for (i= 0; i<numChars; i++){
                      printf("%c", buffer_no_whitespaces[i]);
                      }
                      
@@ -999,6 +989,24 @@ make_command_stream (int (*get_next_byte) (void *),
                      */
                     
                     commandNode_t root = createNodeFromCommand(make_command_tree(buffer_no_whitespaces));
+                    
+                    //printf("adding command node to stream: %s\n", root->cmd->u.word[0]);
+                    
+                    write_list_t write_list = init_write_list();
+                    
+                    //printf("adding command node to stream: %s\n", root->cmd->u.word[0]);
+                    root->write_list = make_write_list(write_list, root->cmd);
+                    read_list_t read_list = init_read_list();
+                    root->read_list = make_read_list(read_list, root->cmd);
+                    
+                    root->tree_number=tree_number;
+                    
+                    root->dependency_list = (commandNode_t*)(checked_realloc(root->dependency_list, (tree_number) * sizeof(commandNode_t)));
+                    memset (root -> dependency_list, '\0', (tree_number) * sizeof(commandNode_t));
+                    
+                    
+                    //printf("adding command node to stream: %s\n", root->cmd->u.word[0]);
+                    
                     addNodeToStream(theStream, root);
                     
                     
@@ -1007,6 +1015,8 @@ make_command_stream (int (*get_next_byte) (void *),
                     free(buffer_no_whitespaces);
                     numChars = 0;
                     consecutive_newlines = 0;
+                    
+                    tree_number++;
                     
                     
                     if (curr == EOF)
@@ -1087,6 +1097,25 @@ make_command_stream (int (*get_next_byte) (void *),
                 numChars++;
             }
             
+            if (curr == '#') {
+                //add hashtag to buffer
+                buffer[numChars] = '#';
+                numChars++;
+                
+                while (identify_char_type(curr) != NEWLINE_CHAR){
+                    if ((curr = get_next_byte(get_next_byte_argument)) == EOF) {
+                        break;
+                    }
+                }
+                if (curr == EOF)
+                    break;
+                
+                //broke out of loop, curr is now a newline char; add to buffer
+                buffer[numChars] = '\n';
+                numChars++;
+                
+            }
+            
             buffer[numChars] = curr;
             numChars++;
             consecutive_newlines = 0;
@@ -1097,6 +1126,7 @@ make_command_stream (int (*get_next_byte) (void *),
     }
     
     char* buffer_no_whitespaces = checked_malloc(BUFFER_SIZE * (sizeof(char)));  //the correct syntaxed command
+    memset(buffer_no_whitespaces, '\0', BUFFER_SIZE * sizeof(char));
     
     //run validation, then parse if correct
     //void eatWhiteSpaces(char *buffer, int bufferSize, char *newArray)
@@ -1122,32 +1152,84 @@ make_command_stream (int (*get_next_byte) (void *),
     
     /*
      if (buffer_no_whitespaces[0] != '\0') {
-     for (int i= 0; i<numChars; i++){
+     int i;
+     for (i= 0; i<numChars; i++){
      printf("%c", buffer_no_whitespaces[i]);
      }
      printf("\n");
      }*/
     
-    commandNode_t root = createNodeFromCommand(make_command_tree(buffer_no_whitespaces));
-    addNodeToStream(theStream, root);
+    
+    //make sure buffer_no_whitespace is not empty
+    if (buffer_no_whitespaces[0] != '\0') {
+        commandNode_t root = createNodeFromCommand(make_command_tree(buffer_no_whitespaces));
+        
+        write_list_t write_list = init_write_list();
+        root->write_list = make_write_list(write_list, root->cmd);
+        read_list_t read_list = init_read_list();
+        root->read_list = make_read_list(read_list, root->cmd);
+        root->tree_number=tree_number;
+        
+        
+        root->dependency_list = (commandNode_t*)(checked_realloc(root->dependency_list, (tree_number) * sizeof(commandNode_t)));
+        memset (root -> dependency_list, '\0', (tree_number) * sizeof(commandNode_t));
+        
+        //printf("adding command node to stream: %s\n", root->cmd->u.word[0]);
+        
+        addNodeToStream(theStream, root);
+    }
     
     free(buffer);
     free(buffer_no_whitespaces);
     
+    theStream->blocked_commands = (commandNode_t*)checked_realloc(theStream->blocked_commands, theStream->num_nodes * sizeof(commandNode_t));
+    memset(theStream->blocked_commands, '\0', theStream->num_nodes * sizeof(commandNode_t));
+    
     return theStream;
+}
+
+void free_command(command_t to_be_freed) {
+    
+    enum command_type cmd_type = to_be_freed->type;
+    
+    free(to_be_freed->input);
+    free(to_be_freed->output);
+    
+    if (cmd_type == AND_COMMAND || cmd_type == OR_COMMAND || cmd_type == PIPE_COMMAND || cmd_type == SEQUENCE_COMMAND) {
+        
+        free_command(to_be_freed->u.command[0]);
+        free_command(to_be_freed->u.command[1]);
+        
+        //we're outta there, now free yourself
+        free(to_be_freed->u.command[0]);
+        free(to_be_freed->u.command[1]);
+        
+    }
+    
+    else if (cmd_type == SIMPLE_COMMAND) {
+        
+        char **w = to_be_freed->u.word;
+        while ( *++w) {
+            free(*w);
+        }
+        //free(w);
+    }
+    
+    else //(cmd_type == SUBSHELL_COMMAND)
+    {
+        
+        free_command(to_be_freed->u.subshell_command);
+        free(to_be_freed->u.subshell_command);
+        
+    }
 }
 
 command_t
 read_command_stream (command_stream_t s)
 {
-    /* FIXME: Replace this with your implementation too.  */
-    
-    
-    
     if (s->head == NULL) {
         return NULL;
     }
-    
     
     command_t grabbed_command = s->head->cmd;
     commandNode_t to_be_freed = s->head;
@@ -1156,9 +1238,7 @@ read_command_stream (command_stream_t s)
     
     if (s->head != NULL) {
         s->head->prev = NULL;
-        
     }
     free(to_be_freed);
     return grabbed_command;
-    
 }
