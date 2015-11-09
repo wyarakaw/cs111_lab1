@@ -1,0 +1,21 @@
+This is a skeleton for CS 111 Lab 1.
+
+Replace this README file with notes on your implementation.
+Mentions any special features or limitations.
+
+This is a skeleton for CS 111 Lab 1.
+
+Replace this README file with notes on your implementation.
+Mentions any special features or limitations.
+
+********* CS 111 LAB 1A ************
+Austin Lazaro, UID 404158419
+Daryn Arakawa, UID 504132711
+
+
+This version of our implementation passes all test cases. 
+
+./test-p-ok.sh does not output any directory.
+./test-p-bad.sh does not output any directory.
+
+Limitations: Memory leakage is suspected. Need to properly free() all allocated space.
