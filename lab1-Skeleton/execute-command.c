@@ -186,18 +186,17 @@ read_list_t make_read_list(read_list_t r_list, command_t c){
             make_read_list(r_list, c->u.command[1]);
             break;
         }
-        case SIMPLE_COMMAND:{
-            //check for arguments
-            int i=1;
-            while (c->u.word[i] != NULL){
+        case SIMPLE_COMMAND: {
+            //check for arguments
+            int i = 1;
+            while (c->u.word[i] != NULL) {
+                
                 rnode_t new_read = create_rnode(c->u.word[i]);
                 add_rnode_to_list(new_read, r_list);
                 i++;
             }
-            
             break;
         }
-            
         case SUBSHELL_COMMAND: {
             make_read_list(r_list, c->u.subshell_command);
             break;
@@ -247,6 +246,7 @@ bool RAW_dependency(read_list_t tree2_read_list, write_list_t tree1_write_list){
     wnode_t tree1_curr_node = tree1_write_list->head;
     
     while (tree2_curr_node != NULL){
+        tree1_curr_node = tree1_write_list->head;
         while (tree1_curr_node != NULL){
             if (strcmp(tree2_curr_node->file_name, tree1_curr_node->file_name) == 0){
                 return true;
@@ -270,6 +270,7 @@ bool WAR_dependency(write_list_t tree2_write_list, read_list_t tree1_read_list){
     rnode_t tree1_curr_node = tree1_read_list->head;
     
     while (tree2_curr_node != NULL){
+        tree1_curr_node = tree1_read_list->head;
         while (tree1_curr_node != NULL){
             if (strcmp(tree2_curr_node->file_name, tree1_curr_node->file_name) == 0){
                 return true;
@@ -293,6 +294,7 @@ bool WAW_dependency(write_list_t tree2_write_list, write_list_t tree1_write_list
     wnode_t tree2_curr_node = tree1_write_list->head;
     
     while (tree1_curr_node != NULL){
+        tree2_curr_node = tree1_write_list ->head;
         while (tree2_curr_node != NULL){
             if (strcmp(tree1_curr_node->file_name, tree2_curr_node->file_name) == 0){
                 return true;
